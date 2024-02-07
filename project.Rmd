@@ -1,0 +1,109 @@
+---
+title: "Machine Learning Prediction Project"
+author: "Michael Harry"
+date: "2024-02-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2);
+library(caret);
+library(randomForest)
+library(scales);
+
+knitr::opts_chunk$set(echo = TRUE);
+```
+
+## Introduction
+
+The goal of this project is to predict the exercise performed by subjects using data from wearable monitoring devices. We will perform some exploratory data analysis to identify issues in the data set and clean the data prior to modeling.
+
+We will prepare three classification models and then use the model with the highest accuracy to classify the 20 provided test cases.
+
+### Data Source Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: 
+http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
+ (see the section on the Weight Lifting Exercise Dataset).
+
+#### Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+
+## Data Exploration and Cleaning
+
+After basic data exploration, we can see that there are numerous features without useful data. We have removed all features
+with a value of "#DIV/0!", "NA" or "".  We also remove the first 7 features that do not contain data relevant to classifying
+the exercise performed.
+
+We then partition the training data set into training and testing data sets with 75% of the data going to the training
+data set and the rest used for the testing data set.
+```{r echo=FALSE}
+set.seed(23674)
+
+trData <- read.csv("./pml-training.csv", na.strings=c("#DIV/0!","NA",""))
+trData <- trData[,colSums(is.na(trData)) == 0]
+trData <- trData[,-c(1:7)]
+trData$classe <- factor(trData$classe)
+
+trPartition <- createDataPartition(y=trData$classe, p=0.75, list=FALSE)
+training <- trData[trPartition, ] 
+testing <- trData[-trPartition, ]
+
+tstData <- read.csv("./pml-testing.csv", na.strings=c("#DIV/0!","NA",""))
+tstData <- tstData[,-c(1:7)]
+tstData <- tstData[,colSums(is.na(testing)) == 0]
+```
+
+## Prediction Models
+
+### CART
+The first model we train is a Classification and Regression Tree (CART) model
+using rpart with 10-fold cross validation.
+
+```{r echo=TRUE}
+# Recursive Partition Decision Tree
+ptm <- proc.time() # Start the clock!
+trainControl_cv <- trainControl(method="cv", number=10)
+modFit_tr_rpart <- train(classe ~ ., method="rpart", data=training, trControl=trainControl_cv)
+pred_tr_rpart <- predict(modFit_tr_rpart, testing)
+conf_tr_rpart <- confusionMatrix(pred_tr_rpart, testing$classe)
+proc.time() - ptm # Stop the clock
+conf_tr_rpart
+```
+
+The out of sample error rate for the CART model is `r label_percent(accuracy = .01)(1-conf_tr_rpart$overall[1])`
+
+### Random Forest
+The second model we train is a Random Forest Decision Tree model using
+bootstrapped resampling.
+
+```{r echo=TRUE}
+# Random Forest
+ptm <- proc.time() # Start the clock!
+trainControl_oob <- trainControl(method="oob", number=10)
+modFit_tr_rf <- train(classe ~ ., method="rf", data=training, trControl=trainControl_oob)
+pred_tr_rf <- predict(modFit_tr_rf, testing)
+conf_tr_rf <- confusionMatrix(pred_tr_rf, testing$classe)
+proc.time() - ptm # Stop the clock
+conf_tr_rf
+```
+
+The out of sample error rate for the Random Forest model is `r label_percent(accuracy = .01)(1-conf_tr_rf$overall[1])`
+
+## Summary
+The Random Forest model is clearly far more accurate than the CART model.
+
+Using the Random Forest model, the predicted results for the test data is:
+```{r echo=TRUE}
+pred_tstData_rf <- predict(modFit_tr_rf, tstData)
+pred_tstData_rf
+```
